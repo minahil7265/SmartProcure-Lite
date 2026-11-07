@@ -1,176 +1,380 @@
 # SmartProcure Lite
 
-Intelligent Purchasing & Vendor Evaluation System
-PHP 8 · MySQL · PDO · HTML5 · CSS3 · JavaScript · Chart.js (no frameworks)
+**Purchasing & Vendor Evaluation System**
 
-**The flow**
+A role-based web application that digitises the complete procurement lifecycle of an organisation — from an employee's purchase request, through departmental approval and sealed-bid vendor quotations, to purchase orders, goods receipt and vendor performance tracking — with budget control and a full audit trail built in.
 
-```text
-Employee raises a request ──► Manager approves (or Admin, if escalated)
-        ──► Procurement officer sends an RFQ to chosen vendors, with a deadline
-        ──► Vendors log in and submit sealed quotations (price, delivery, warranty)
-        ──► After the deadline: officer compares independent scores and selects
-        ──► Purchase order sent ──► Vendor accepts or declines
-        ──► Officer records deliveries (partial or complete)
-```
-
-Budgets, dashboards, in-app notifications and an audit log cover the whole flow.
+![PHP](https://img.shields.io/badge/PHP-8.x-777BB4?logo=php&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8.0%2B-4479A1?logo=mysql&logoColor=white)
+![Apache](https://img.shields.io/badge/Apache-2.4-D22128?logo=apache&logoColor=white)
+![Chart.js](https://img.shields.io/badge/Chart.js-4.4-FF6384?logo=chartdotjs&logoColor=white)
+![Status](https://img.shields.io/badge/status-active-success)
 
 ---
 
-## 1. Project structure
+## Table of Contents
 
-Only `public/` is reachable from the browser. Configuration, logic and SQL sit
-outside it, as in the course guides.
+1. [Overview](#overview)
+2. [Key Features](#key-features)
+3. [User Roles](#user-roles)
+4. [Procurement Workflow](#procurement-workflow)
+5. [Vendor Evaluation Model](#vendor-evaluation-model)
+6. [Technology Stack](#technology-stack)
+7. [Project Structure](#project-structure)
+8. [Database Design](#database-design)
+9. [Security](#security)
+10. [Installation](#installation)
+11. [Configuration](#configuration)
+12. [Testing](#testing)
+13. [Roadmap](#roadmap)
+---
 
-```text
-/var/www/smartprocure/
-├── config/
-│   ├── config.example.php   ← copy to config.php and edit (all settings live here)
-│   └── database.php         ← PDO connection ($pdo)
-├── includes/
-│   ├── bootstrap.php        ← every page loads this one file
-│   ├── constants.php        ← roles and statuses
-│   ├── session.php          ← safe session cookie, idle timeout, destroySession()
-│   ├── auth.php             ← requireLogin(), requireRole(), requireVendor()
-│   ├── csrf.php             ← csrfField(), verifyCsrf()
-│   ├── helpers.php          ← e(), url(), redirect(), flash(), money()
-│   ├── navigation.php       ← sidebar links per role
-│   ├── header.php / footer.php  ← layout, breadcrumbs, navigation
-│   └── partials/            ← shared request and vendor forms
-├── app/                     ← business rules
-│   ├── audit.php            ← audit log
-│   ├── approvals.php        ← who may decide; escalation to the admin
-│   ├── budget.php           ← budget periods, available amount
-│   ├── deliveries.php       ← partial deliveries (transactions)
-│   ├── notifications.php    ← in-app notifications
-│   ├── orders.php           ← create / cancel / vendor accept-decline (transactions)
-│   ├── ratelimit.php        ← login rate limit
-│   ├── reliability.php      ← delivery-reliability rating from order history
-│   ├── requests.php         ← request validation and access rules
-│   ├── rfqs.php             ← RFQs, invitations, sealed vendor quotations
-│   ├── scoring.php          ← eligibility + independent scoring
-│   ├── settings.php         ← admin-editable settings (scoring weights)
+## Overview
+
+Many small and mid-sized organisations still manage purchasing through email threads and spreadsheets. This leads to unapproved spending, no price comparison, no record of who decided what, and no objective way to judge suppliers.
+
+**SmartProcure Lite** replaces that with a single, structured system where:
+
+- every purchase starts as a **request** that must be approved by the right manager,
+- spending is checked against a **departmental budget** before an order is placed,
+- vendors compete through **sealed-bid RFQs**, and the winning quotation is chosen with a **transparent, weighted scoring formula**,
+- every important action is written to an **append-only audit log**.
+
+The application is written in plain PHP (no framework) with a clean separation between pages, business rules and shared infrastructure, which makes it easy to read, test and extend.
+
+---
+
+## Key Features
+
+### Purchasing workflow
+- **Purchase requests** with multiple line items, estimated prices and a "needed by" date; Draft → Submitted → Approved / Rejected / Cancelled lifecycle.
+- **Manager approvals** limited to managers of the same department (a requester can never approve their own request).
+- **Admin escalation** when a department has no other active manager and the request has waited beyond a configurable number of days.
+- **Departmental budgets** per period (yearly or monthly); funds are committed when an order is created and released if the vendor declines or the order is cancelled.
+
+### Sourcing and vendor selection
+- **RFQ (Request for Quotation)** — the procurement officer invites a minimum number of active vendors with a deadline.
+- **Sealed bids** — before the deadline, no one (not even the officer) can see quoted prices, and vendors never see each other.
+- **Independent, explainable scoring** of every quotation on price, delivery and reliability, with admin-configurable weights.
+- **Reliability rating (1–5)** calculated automatically from each vendor's on-time delivery history, with a documented manual override that requires a written reason.
+
+### Fulfilment
+- **Purchase orders** with a vendor acknowledgement step (Accept / Decline).
+- **Partial and complete deliveries** per item, with over-receiving blocked by the server.
+- **Vendor portal** — suppliers log in to see only their own RFQs and orders, submit quotations and respond to orders.
+
+### Administration and visibility
+- **User management** — signup requires admin approval; roles, departments and vendor links managed by the admin.
+- **Department, budget and vendor management.**
+- **Audit logs** for logins, decisions, vendor selections (including the weights and formula version used) and more.
+- **In-app notifications** for each stage of the process.
+- **Role-specific dashboards** with Chart.js charts.
+- **Admin settings page** for scoring weights.
+
+---
+
+## User Roles
+
+| Role | Description | Main capabilities |
+|---|---|---|
+| **Employee / Requester** | Staff member who needs goods or services | Create, edit, submit and cancel own purchase requests |
+| **Manager / Approver** | Department head | Approve or reject requests of their own department |
+| **Procurement Officer** | Handles sourcing | Create RFQs, compare quotations, select a vendor, raise purchase orders, record deliveries, manage vendors |
+| **Administrator** | System owner | Manage users, departments, budgets, settings; view audit logs; decide escalated approvals |
+| **Vendor** | External supplier | Respond to own RFQs, accept or decline own orders |
+
+Access is enforced on the server for every page and action (role checks, ownership checks and account-status checks), not just by hiding menu items.
+
+---
+
+## Procurement Workflow
+
+The diagram below shows the complete lifecycle of a purchase, step by step, with the role responsible for each stage.
+
+```mermaid
+flowchart TD
+    START([Need identified]) --> S1
+
+    subgraph EMP["Employee"]
+        S1["1. Create purchase request<br/>items, quantities, estimated prices"]
+        S2["2. Submit request"]
+        S1 --> S2
+    end
+
+    S2 --> S3{"3. Manager review<br/>same department"}
+
+    subgraph MGR["Manager / Admin"]
+        S3
+        ESC["Admin decides<br/>if escalated"]
+    end
+
+    S3 -. "no other manager<br/>after 3 days" .-> ESC
+    ESC --> S3
+    S3 -->|Rejected| REJ([Request closed])
+    S3 -->|Approved| S4
+
+    subgraph PRO["Procurement Officer"]
+        S4["4. Create RFQ<br/>invite 2+ active vendors + deadline"]
+        S6["6. Deadline passed<br/>compare and score quotations"]
+        S7["7. Select best vendor<br/>weights saved to audit log"]
+        S8{"8. Budget<br/>available?"}
+        S9["9. Create purchase order<br/>budget committed"]
+        S12["12. Record delivery<br/>partial or complete"]
+        S4 --> S6 --> S7 --> S8
+        S8 -->|Yes| S9
+    end
+
+    S4 --> S5
+
+    subgraph VEN["Vendor"]
+        S5["5. Submit sealed quotation<br/>before deadline"]
+        S10{"10. Vendor<br/>response"}
+    end
+
+    S5 --> S6
+    S8 -->|No| BLOCK(["Order blocked<br/>admin adjusts budget"])
+    S9 --> S10
+    S10 -->|Declined| REL["Budget released"]
+    REL --> S7
+    S10 -->|Accepted| S12
+
+    S12 --> S13{"13. All items<br/>fully received?"}
+    S13 -->|No| S12
+    S13 -->|Yes| S14["14. Order marked Delivered<br/>reliability rating updated"]
+    S14 --> END([Process complete])
+
+    classDef start fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
+    classDef stop fill:#ffebee,stroke:#c62828,color:#b71c1c;
+    classDef decision fill:#fff8e1,stroke:#f9a825,color:#5d4037;
+    class START,END start;
+    class REJ,BLOCK stop;
+    class S3,S8,S10,S13 decision;
+```
+
+### Step-by-step summary
+
+| # | Step | Actor | Result |
+|---|---|---|---|
+| 1-2 | Create and submit a purchase request | Employee | Request becomes *Submitted* |
+| 3 | Review the request | Manager (or Admin if escalated) | *Approved* or *Rejected*, recorded permanently |
+| 4 | Create an RFQ and invite vendors | Procurement Officer | RFQ is *Open* until the deadline |
+| 5 | Submit a quotation for every requested item | Vendor | Bid stays sealed until the deadline |
+| 6 | Compare and score eligible quotations | Procurement Officer | Ranked by weighted score |
+| 7 | Select the winning vendor | Procurement Officer | RFQ becomes *Awarded*; decision audited |
+| 8-9 | Check budget and create the purchase order | Procurement Officer | Order is *Created*; budget is committed |
+| 10 | Accept or decline the order | Vendor | *Accepted*, or *Declined* with budget released |
+| 11 | Notifications sent at each stage | System | Users are informed in-app |
+| 12-13 | Record goods received, item by item | Procurement Officer | *Partially Delivered* until everything arrives |
+| 14 | Close the order and update the vendor rating | System | *Delivered*; reliability rating recalculated |
+
+**Status models**
+
+| Entity | Statuses |
+|---|---|
+| Purchase request | Draft, Submitted, Approved, Rejected, Cancelled |
+| RFQ | Open, Awarded, Cancelled (shown as *Closed* automatically after the deadline) |
+| Quotation | Received, Selected, Rejected |
+| Purchase order | Created, Accepted, Declined, Partially Delivered, Delivered, Cancelled |
+| Delivery | Partial, Complete |
+
+---
+
+## Vendor Evaluation Model
+
+Each quotation is scored **on its own** against fixed values from the request, so adding or removing another vendor's quote never changes an existing score. The formula version (`v2-independent`) and the weights in force are saved to the audit log whenever a vendor is selected.
+
+| Criterion | Formula | Default weight |
+|---|---|---|
+| **Price** | `estimated total ÷ quoted total × 100` (capped at 100) | 50 % |
+| **Delivery** | `days available ÷ promised delivery days × 100` (capped at 100) | 30 % |
+| **Reliability** | `reliability rating ÷ 5 × 100` | 20 % |
+
+`Final score = (price × w₁ + delivery × w₂ + reliability × w₃) ÷ 100`
+
+- *Days available* = required date − quotation date (a configurable fallback is used when no date is set).
+- Weights are editable by the administrator and must total 100.
+- **Eligibility:** only quotations that cover **every requested item for the full quantity**, from an **active** vendor, still **valid** and not declined or rejected, are scored.
+- **Reliability rating** is derived from the percentage of completed orders delivered on or before the expected date:
+
+| On-time rate | Rating |
+|---|---|
+| ≥ 95 % | 5 |
+| ≥ 85 % | 4 |
+| ≥ 70 % | 3 |
+| ≥ 50 % | 2 |
+| below 50 % | 1 |
+
+Vendors with fewer than 3 completed orders receive a neutral default rating of 3. All thresholds are configurable.
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | PHP 8.x (procedural, no framework), PDO with prepared statements |
+| Database | MySQL 8.0+ / InnoDB, `utf8mb4` |
+| Web server | Apache 2.4 |
+| Frontend | HTML5, custom CSS, vanilla JavaScript |
+| Charts | [Chart.js](https://www.chartjs.org/) 4.4 (loaded from CDN) |
+| Testing | Dependency-free PHP test runner (CLI) |
+
+---
+
+## Project Structure
+
+```
+smartprocure/
+├── app/                    # Business rules (one file per domain)
+│   ├── approvals.php       #   approval authority and escalation
+│   ├── audit.php           #   audit logging
+│   ├── budget.php          #   budget periods, availability, commitments
+│   ├── deliveries.php      #   delivery validation and status rules
+│   ├── notifications.php   #   in-app notifications
+│   ├── orders.php          #   purchase order lifecycle
+│   ├── ratelimit.php       #   login throttling
+│   ├── reliability.php     #   on-time delivery rating
+│   ├── requests.php        #   purchase request rules and validation
+│   ├── rfqs.php            #   RFQs and sealed-bid rules
+│   ├── scoring.php         #   vendor scoring and eligibility
+│   ├── settings.php        #   admin-editable settings
 │   └── vendors.php
-├── public/                  ← DocumentRoot
-│   ├── index.php, login.php, signup.php, logout.php, dashboard.php,
-│   │   profile.php, notifications.php
-│   ├── requests/   (index, create, edit, view, action)
-│   ├── approvals/  (index, review)             ← managers; admin for escalations
-│   ├── rfqs/       (index, create, view, override, cancel)   ← procurement
-│   ├── orders/     (index, create, view, cancel)
-│   ├── deliveries/ (create)
-│   ├── vendors/    (index, create, edit, view)
-│   ├── vendor/     (rfqs, rfq, orders, order) ← the VENDOR PORTAL
-│   ├── admin/      (users, user_create, user_edit, user_action, departments,
-│   │                department_edit, department_delete, budgets, budget_edit,
-│   │                settings, audit_logs)
-│   └── assets/     (css/style.css, js/app.js)
+├── config/
+│   ├── config.example.php  # Configuration template (copy to config.php)
+│   └── database.php        # PDO connection
 ├── database/
-│   ├── schema.sql           ← database + 19 tables
-│   ├── create_app_user.sql  ← least-privilege MySQL user
-│   └── seed_demo.sql        ← optional departments, budgets, vendors
+│   ├── schema.sql          # 19 tables, constraints, indexes
+│   ├── create_app_user.sql # Least-privilege MySQL user
+│   └── seed_demo.sql       # Optional demo data
+├── includes/               # Shared infrastructure
+│   ├── bootstrap.php       #   single entry point loaded by every page
+│   ├── auth.php            #   authentication and RBAC
+│   ├── csrf.php            #   CSRF protection
+│   ├── session.php         #   hardened session start
+│   ├── helpers.php, constants.php, navigation.php, footer.php
+│   └── partials/           #   reusable form fragments
+├── public/                 # Web root (the only folder exposed by Apache)
+│   ├── admin/              #   users, departments, budgets, settings, audit logs
+│   ├── requests/           #   purchase requests
+│   ├── approvals/          #   manager approval queue
+│   ├── rfqs/               #   RFQ creation, comparison, vendor selection
+│   ├── orders/             #   purchase orders
+│   ├── deliveries/         #   goods receipt
+│   ├── vendors/            #   vendor directory
+│   ├── vendor/             #   vendor portal
+│   ├── assets/             #   css/ and js/
+│   └── login.php, signup.php, dashboard.php, profile.php, notifications.php
 ├── scripts/
-│   ├── create_admin.php     ← creates the first admin from the terminal
-│   └── db_check.php         ← tests the connection with PDO and MySQLi
+│   ├── create_admin.php    # Create the first administrator (CLI)
+│   └── db_check.php        # Verify the database connection (CLI)
 └── tests/
-    └── run_tests.php        ← 55 tests: scoring, reliability, escalation, deliveries...
+    └── run_tests.php       # Business-rule test suite (CLI)
 ```
+
+Only `public/` is meant to be served by the web server; configuration, business logic and CLI scripts stay outside the document root.
 
 ---
 
-## 2. Install and run (Ubuntu)
+## Database Design
 
-> **Already installed the earlier version?** The database changed (19 tables
-> instead of 14), so start fresh. This deletes the old test data:
->
-> ```bash
-> sudo mysql -e "DROP DATABASE IF EXISTS smartprocure_db; DROP USER IF EXISTS 'procure_user'@'localhost';"
-> sudo rm -rf /var/www/smartprocure
-> ```
->
-> Then follow every step below again.
+The schema contains **19 InnoDB tables**:
 
-### Step 1: Packages (skip if you already did the Ubuntu guide)
+| Area | Tables |
+|---|---|
+| Organisation | `departments`, `users`, `budgets` |
+| Requests and approvals | `purchase_requests`, `purchase_request_items`, `approvals` |
+| Sourcing | `vendors`, `rfqs`, `rfq_vendors`, `quotations`, `quotation_items` |
+| Orders and delivery | `purchase_orders`, `purchase_order_items`, `deliveries`, `delivery_items` |
+| Platform | `audit_logs`, `settings`, `login_attempts`, `notifications` |
+
+Design highlights:
+
+- Foreign keys and `CHECK` constraints (non-negative budgets, positive quantities, etc.) protect integrity at the database level.
+- `ENUM` columns mirror the constants defined in `includes/constants.php`.
+- Budget rows are locked with `SELECT … FOR UPDATE` inside transactions to prevent two orders overspending the same budget.
+- The application database user is **least-privilege**: for `approvals`, `deliveries`, `rfq_vendors` and `audit_logs` it can only `SELECT` and `INSERT`, so decision history and audit records cannot be altered or deleted through the application.
+
+---
+
+## Security
+
+| Concern | Measure |
+|---|---|
+| SQL injection | PDO prepared statements throughout |
+| Passwords | `password_hash()` / `password_verify()` |
+| Session fixation | `session_regenerate_id(true)` on login, strict mode, cookie-only sessions |
+| Session cookies | `HttpOnly`, configurable `Secure`, `SameSite`, idle timeout |
+| CSRF | Per-session token verified on every POST (`hash_equals`) |
+| Brute force | Login rate limiting per email and per IP |
+| Authorisation | Role checks on every page; account status re-read from the database on every request, so deactivation or role changes apply immediately |
+| Privilege escalation | Public signup always creates an inactive *employee* account that needs admin approval |
+| Data exposure | Sealed bids; vendors see only their own RFQs and orders |
+| Browser caching | `no-store` headers so private pages are not shown after logout |
+| Clickjacking / sniffing | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin` |
+| Error handling | Unhandled errors roll back open transactions, are logged server-side and shown as a friendly message |
+| Accountability | Append-only audit log |
+| Secrets | `config/config.php` is git-ignored; the first admin is created from the CLI, so no password exists in code or SQL |
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Ubuntu / Debian-based Linux (other platforms work with equivalent steps)
+- Apache 2.4 with `mod_rewrite` and PHP 8.x (`php-mysql`, `php-mbstring`)
+- MySQL 8.0 or newer (required for `CHECK` constraints)
+- Git
+
+### 1. Get the code
 
 ```bash
-sudo apt update
-sudo apt install apache2 mysql-server php libapache2-mod-php php-mysql php-cli php-mbstring php-xml -y
-sudo systemctl enable --now apache2 mysql
-php -v
-```
-
-### Step 2: Copy the project
-
-From the folder where you extracted the zip:
-
-```bash
-sudo cp -r smartprocure /var/www/smartprocure
-sudo chown -R $USER:www-data /var/www/smartprocure
-sudo chmod -R 755 /var/www/smartprocure
+git clone <your-repository-url> /var/www/smartprocure
 cd /var/www/smartprocure
 ```
 
-### Step 3: Create the database and tables
+### 2. Create the database and tables
 
 ```bash
 sudo mysql < database/schema.sql
 ```
 
-### Step 4: Create the application database user
+### 3. Create the application database user
 
-Choose a password, put it in the SQL file, then run it:
+Open `database/create_app_user.sql`, replace `CHANGE_THIS_PASSWORD` with a strong password, then run:
 
 ```bash
-nano database/create_app_user.sql      # replace CHANGE_THIS_PASSWORD
 sudo mysql < database/create_app_user.sql
 ```
 
-### Step 5: Configuration
+### 4. Configure the application
 
 ```bash
 cp config/config.example.php config/config.php
-nano config/config.php                 # put the SAME password under 'db' => 'password'
-chmod 640 config/config.php
+nano config/config.php        # set the same DB password; adjust base_url if needed
 ```
 
-Other settings in that file: currency, timezone, idle timeout, budget period
-format, and the scoring weights (50 / 30 / 20).
-
-### Step 6: Demo data (optional but recommended)
-
-```bash
-sudo mysql smartprocure_db < database/seed_demo.sql
-```
-
-This adds 4 departments, a budget for each for this year, and 4 vendors
-(one inactive). It creates no user accounts.
-
-### Step 7: Create the first administrator
-
-```bash
-php scripts/create_admin.php
-```
-
-### Step 8: Check the connection
+Verify the connection:
 
 ```bash
 php scripts/db_check.php
 ```
 
-Expected:
+### 5. (Optional) Load demo data
 
-```text
-[OK]   PDO connected. Tables found: 19 (expected 19)
-[OK]   MySQLi connected. Administrators: 1
-[OK]   The app user cannot delete audit logs (as required).
-```
-
-### Step 9: Apache virtual host
+Adds four departments, a yearly budget of Rs. 5,000,000 for each, and sample vendors.
 
 ```bash
-sudo nano /etc/apache2/sites-available/smartprocure.conf
+sudo mysql smartprocure_db < database/seed_demo.sql
 ```
+
+### 6. Create the first administrator
+
+```bash
+php scripts/create_admin.php
+```
+
+### 7. Point Apache at `public/`
 
 ```apache
 <VirtualHost *:80>
@@ -178,200 +382,84 @@ sudo nano /etc/apache2/sites-available/smartprocure.conf
     DocumentRoot /var/www/smartprocure/public
 
     <Directory /var/www/smartprocure/public>
-        Options -Indexes
         AllowOverride All
         Require all granted
     </Directory>
-
-    ErrorLog ${APACHE_LOG_DIR}/smartprocure_error.log
-    CustomLog ${APACHE_LOG_DIR}/smartprocure_access.log combined
 </VirtualHost>
 ```
 
 ```bash
-sudo a2ensite smartprocure.conf
-sudo apache2ctl configtest
-sudo systemctl reload apache2
-```
-
-### Step 10: Local domain
-
-```bash
+sudo a2ensite smartprocure && sudo systemctl reload apache2
 echo "127.0.0.1 smartprocure.local" | sudo tee -a /etc/hosts
-getent hosts smartprocure.local
 ```
 
-Open **http://smartprocure.local** and log in with the admin you created.
+Open **http://smartprocure.local** and log in with the administrator account.
 
-### Step 11: Run the tests
+> **Running from a sub-folder?** If you open the app as `http://localhost/smartprocure`, set `'base_url' => '/smartprocure'` in `config/config.php`.
+
+### First-time setup checklist
+
+1. Log in as admin and review **Settings** (scoring weights).
+2. Create or review **Departments** and **Budgets**.
+3. Have staff **sign up**, then approve them under **Users** and assign roles (manager, procurement).
+4. Add **Vendors**, then create vendor-portal accounts linked to them.
+
+---
+
+## Configuration
+
+All settings live in `config/config.php` (template: `config/config.example.php`). Nothing is hard-coded in the pages.
+
+| Key | Purpose | Default |
+|---|---|---|
+| `db.*` | MySQL host, name, user, password, charset | `localhost`, `smartprocure_db`, `procure_user` |
+| `app.base_url` | URL prefix when not served from the site root | `''` |
+| `app.timezone` | PHP timezone | `Asia/Karachi` |
+| `app.currency` | Currency label | `Rs.` |
+| `app.debug` | Show detailed errors (development only) | `false` |
+| `session.idle_timeout` | Auto-logout after inactivity (seconds) | `1800` |
+| `session.secure` | Set `true` when served over HTTPS | `false` |
+| `budget_period_format` | `Y` = yearly, `Y-m` = monthly | `Y` |
+| `scoring.weight_*` | Default price / delivery / reliability weights | `50 / 30 / 20` |
+| `scoring.fallback_delivery_days` | Used when a request has no needed-by date | `14` |
+| `reliability.*` | Minimum orders, default rating, on-time thresholds | `3`, `3`, see above |
+| `rfq.min_vendors` | Minimum vendors to invite | `2` |
+| `rfq.default_deadline_days` | Suggested RFQ deadline | `3` |
+| `escalation_days` | Days before admin may decide a stuck approval | `3` |
+| `rate_limit.*` | Failed-login limits per email / IP and window | `5 / 20 / 15 min` |
+| `password_min_length` | Minimum password length | `8` |
+
+**Production recommendations:** serve over HTTPS and set `session.secure` to `true`; keep `app.debug` as `false`; use a strong database password; restrict file permissions on `config/config.php`.
+
+---
+
+## Testing
+
+The test runner covers business rules that do not require a database:
+
+- vendor scoring and its independence from other quotations,
+- scoring weights,
+- delivery reliability rating,
+- quotation eligibility,
+- approval escalation,
+- partial and complete deliveries (e.g. 20 computers received as 15, then 5),
+- purchase request validation.
 
 ```bash
 php tests/run_tests.php
 ```
 
----
-
-## 3. First run and demonstration
-
-Use a different browser (or a private window) for each user, or log out between users.
-
-### 3.1 Create the accounts (as admin)
-
-*Users → Add user*. Staff need a department; vendors need a vendor company and no department.
-
-| Name | Role | Department / company |
-|---|---|---|
-| Employee | Employee | Information Technology |
-| Manager | Manager | Information Technology |
-| Officer | Procurement Officer | Information Technology |
-| Vendor A | Vendor | TechZone Traders |
-| Vendor B | Vendor | Digital Hub Pvt Ltd |
-| Vendor C | Vendor | Prime Computers |
-
-Signing up on the public page also works for staff: the account starts as an
-inactive **employee** until the admin approves it. Vendors cannot sign up.
-
-### 3.2 The full flow
-
-1. **Employee:** *New request* → "Desktop computer", quantity 20, estimated unit price
-   5,500, needed by 14 days from today → **Submit for approval**.
-2. **Manager:** *Approvals* → **Review** → **Approve**.
-3. **Officer:** *RFQs* → **Create RFQ** → tick the three vendors → set the deadline
-   **5 minutes from now** (for a quick demo) → **Send RFQ**.
-4. **Each vendor:** *My RFQs* → **Submit quotation**:
-
-   | Vendor | Unit price | Delivery days | Warranty |
-   |---|---|---|---|
-   | A | 5,000 | 8 | 12 |
-   | B | 6,000 | 6 | 24 |
-   | C | 2,000 | 30 | 6 |
-
-5. **Officer**, before the deadline: the RFQ shows "3 of 3 vendors" but **no prices**
-   (sealed bids). After the deadline it shows the scores:
-   A **92.00**, B **87.83**, C **76.00** (new vendors all have reliability 3 / 5).
-6. **Officer:** **Select vendor** for A → **Create and send purchase order**.
-7. **Vendor A:** *My orders* → **Decline** with a reason. The budget is released.
-8. **Officer:** back on the RFQ, select B → **Vendor B** accepts.
-9. **Officer:** on the order, **Record delivery** 15 → *Partially Delivered*,
-   then 5 → *Delivered*.
-10. **Admin:** *Audit log* → filter `vendor_selected` to see the saved ranking,
-    weights and formula version.
-
-### 3.3 Show the other features
-
-- **Escalation:** create a manager in *Finance* (the only one there) and let them
-  submit a request. It reaches the admin's *Escalated approvals* after
-  `escalation_days` (3). For a live demo, set `'escalation_days' => 0` in
-  `config/config.php`, then set it back.
-- **Scoring weights:** *Scoring settings* → e.g. 40 / 40 / 20 → the comparison changes.
-  Weights that do not add up to 100 are refused.
-- **Rate limit:** type a wrong password 5 times → the 6th try is refused, even with
-  the right password, for 15 minutes.
-- **Vendor security:** log in as vendor C and open an RFQ number it was not
-  invited to: it shows "not found", exactly like an RFQ that does not exist.
+The script prints `[PASS]` / `[FAIL]` for each case and a final summary.
 
 ---
 
-## 4. Where each requirement is implemented
+## Roadmap
 
-| Requirement | Where |
-|---|---|
-| Login, logout, password hashing | `public/login.php`, `logout.php`, `password_hash` / `password_verify` |
-| Default role employee, admin approval of new accounts | `users.role DEFAULT 'employee'`, `is_active DEFAULT 0`; `admin/users.php` + `user_action.php` |
-| Roles: Employee, Manager, Procurement Officer, Administrator | `includes/constants.php`, `requireRole()` on every page |
-| Role-based redirect and navigation | `dashboard.php`, `includes/navigation.php` |
-| Session security | `includes/session.php`: HttpOnly, SameSite, strict mode, ID regenerated at login, idle timeout |
-| Logout ends session and cookie | `destroySession()`: clears `$_SESSION`, expires cookie, `session_destroy()`; POST + CSRF; no-cache headers |
-| CSRF | `includes/csrf.php`; `verifyCsrf()` on every POST |
-| SQL injection | PDO prepared statements everywhere, `ATTR_EMULATE_PREPARES = false` |
-| XSS | every output goes through `e()` (`htmlspecialchars`) |
-| Breadcrumbs and navigation | `includes/header.php` (`$breadcrumbs` set on every page) |
-| Departments and budgets | `admin/departments.php`, `admin/budgets.php`, `app/budget.php` |
-| Requests with several items, statuses | `requests/*`, estimated total recalculated on the server |
-| Approvals, comment required on rejection, no self-approval | `approvals/review.php` |
-| Vendors (inactive kept in history) | `vendors/*` (no delete; status Active/Inactive) |
-| Purchase orders, one active per request, transaction + row locks | `app/orders.php` |
-| Partial deliveries, never above remaining | `app/deliveries.php`, `deliveries/create.php` |
-| Overdue orders highlighted | `isOverdue()`, orders list, dashboard |
-| Dashboards with Chart.js | `dashboard.php` + `assets/js/app.js` |
-| Audit log that cannot be edited | `app/audit.php`; app user has only SELECT + INSERT (`create_app_user.sql`) |
-| PDO and MySQLi | app uses PDO; `scripts/db_check.php` shows both |
-| Vendor role and portal (RFQs, quotations, PO accept/decline) | `public/vendor/*`, `app/rfqs.php`, `app/orders.php` |
-| Ownership checks on every vendor page | `requireVendor()`, `vendorIsInvited()`, order `vendor_id` check; vendor ID only from the session |
-| Sealed bids, deadline enforced on the server | `rfqs/view.php` loads prices only after the deadline; `saveVendorQuotation()` re-checks it inside a locked transaction |
-| Escalation to admin (single-manager departments) | `app/approvals.php`, `approvals/index.php`, `approvals/review.php` |
-| Independent scoring, weights editable by admin | `app/scoring.php`, `admin/settings.php` (sum 100), weights + formula version in the audit log |
-| Delivery-reliability rating from history, override with reason | `app/reliability.php`, `rfqs/override.php` |
-| Login rate limit | `app/ratelimit.php`, `login.php` |
-| In-app notifications | `app/notifications.php`, `notifications.php` |
-| Testing | `tests/run_tests.php` |
+- Email delivery for notifications (the notification layer is already abstracted for this)
+- Exportable reports (PDF / CSV) for spending and vendor performance
+- Document attachments for requests and quotations
+- Multi-currency support
+- Integration tests against a test database
 
 ---
 
-## 5. Who can do what
-
-| Page | Employee | Manager | Procurement | Admin | Vendor |
-|---|---|---|---|---|---|
-| Own requests (create, edit, cancel) | ✓ | ✓ | ✓ | | |
-| Approve / reject (own department, not own) | | ✓ | | escalated only | |
-| RFQs, comparison, purchase orders, deliveries | | | ✓ | orders: view only | |
-| Vendor directory | | | ✓ | view only | |
-| Users, departments, budgets, scoring settings, audit log | | | | ✓ | |
-| Own RFQs and quotations, own orders (accept/decline) | | | | | ✓ |
-
-Every page checks the role on the server. Hiding a link is only for convenience.
-A vendor never sees requests, budgets, estimates, other vendors or the audit log.
-
----
-
-## 6. Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| "Missing config/config.php" | `cp config/config.example.php config/config.php` |
-| "Database connection failed" | Password in `config.php` must match `create_app_user.sql`. Run `php scripts/db_check.php`. |
-| Error log shows `SQLSTATE[HY000] [2002]` | MySQL is not running or not reachable: `sudo systemctl status mysql`, then `sudo systemctl start mysql`. |
-| Error log shows `[1045] Access denied` | Wrong database password: make `config.php` match the one in `create_app_user.sql`. |
-| "Form expired" page | Reload the page and submit again (CSRF token changed after login/logout). |
-| Charts or font not showing | Chart.js and the font load from the internet; the rest works offline. |
-| Apache prints "AH00558: Could not reliably determine the server's fully qualified domain name" | Harmless notice. To silence it: `echo "ServerName localhost" \| sudo tee /etc/apache2/conf-available/servername.conf && sudo a2enconf servername && sudo systemctl reload apache2` |
-| `Call to undefined function mb_strlen` | `sudo apt install php-mbstring && sudo systemctl reload apache2` |
-| "Too many failed attempts" | Wait 15 minutes, or clear the counter: `sudo mysql smartprocure_db -e "DELETE FROM login_attempts"` |
-| A vendor cannot log in | The vendor company is *Inactive*, or the account is not linked to a company (admin: *Users → Edit*). |
-| No vendors can be ticked on *Create RFQ* | Only active vendors with a login account can be invited. Admin: *Users → Add user → role Vendor*. |
-| Comparison shows "Bids are sealed" | The deadline has not passed yet. Prices appear after it. |
-| Cannot record a delivery | The vendor has not accepted the order yet. |
-| Page shows PHP code / 404 | Check `DocumentRoot` points to `/var/www/smartprocure/public`. |
-| See real errors | `sudo tail -f /var/log/apache2/smartprocure_error.log` or set `'debug' => true` in config.php while developing |
-
----
-
-## 7. Settings in `config/config.php`
-
-| Setting | Default | Meaning |
-|---|---|---|
-| `scoring` weights | 50 / 30 / 20 | Starting weights; the admin changes them on *Scoring settings* |
-| `scoring.fallback_delivery_days` | 14 | Days assumed when a request has no needed-by date |
-| `reliability.min_orders` / `default_rating` | 3 / 3 | Vendors with fewer completed orders get the default rating |
-| `reliability.thresholds` | 95 / 85 / 70 / 50 % | On-time % needed for ratings 5 / 4 / 3 / 2 (below = 1) |
-| `rfq.min_vendors` | 2 | Vendors to invite at least |
-| `escalation_days` | 3 | Days before a request with no other manager goes to the admin |
-| `rate_limit` | 5 per email, 20 per IP, 15 min | Failed logins before the login is locked |
-| `session.idle_timeout` | 1800 | Seconds of inactivity before automatic logout |
-
----
-
-## 8. Git
-
-`config/config.php` is in `.gitignore`, so your real password never goes to GitHub.
-Commit `config.example.php` instead.
-
-```bash
-git init
-git add .
-git commit -m "SmartProcure Lite"
-```
-=======
-# SmartProcure-Lite
-SmartProcure Lite is a web-based procurement management system that streamlines purchase requests, vendor management, quotation handling, purchase orders, approval workflows, budget tracking, and audit logging using PHP and MySQL.
->>>>>>> origin/main
