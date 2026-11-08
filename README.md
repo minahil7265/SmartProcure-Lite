@@ -16,20 +16,20 @@ A role-based web application that digitises the complete procurement lifecycle o
 
 1. [Overview](#overview)
 2. [Key Features](#key-features)
-3. [User Roles](#user-roles)
-4. [Procurement Workflow](#procurement-workflow)
-5. [Vendor Evaluation Model](#vendor-evaluation-model)
-6. [Technology Stack](#technology-stack)
-7. [Project Structure](#project-structure)
-8. [Database Design](#database-design)
-9. [Security](#security)
-10. [Installation](#installation)
-11. [Configuration](#configuration)
-12. [Testing](#testing)
-13. [Roadmap](#roadmap)
-14. [Author](#author)
-
+3. [Project Demonstration](#video)
+4. [User Roles](#user-roles)
+5. [Procurement Workflow](#procurement-workflow)
+6. [Vendor Evaluation Model](#vendor-evaluation-model)
+7. [Technology Stack](#technology-stack)
+8. [Project Structure](#project-structure)
+9. [Database Design](#database-design)
+10. [Security](#security)
+11. [Installation](#installation)
+12. [Configuration](#configuration)
+13. [Testing](#testing)
+14. [Roadmap](#roadmap)
 ---
+
 
 ## Overview
 
@@ -53,6 +53,14 @@ The application is written in plain PHP (no framework) with a clean separation b
 - **Manager approvals** limited to managers of the same department (a requester can never approve their own request).
 - **Admin escalation** when a department has no other active manager and the request has waited beyond a configurable number of days.
 - **Departmental budgets** per period (yearly or monthly); funds are committed when an order is created and released if the vendor declines or the order is cancelled.
+
+
+### Project Demonstration
+
+Watch the complete demonstration of SmartProcure Lite:
+
+[▶ Watch SmartProcure Lite Demo](docs/Demo_video.mov)
+
 
 ### Sourcing and vendor selection
 - **RFQ (Request for Quotation)** — the procurement officer invites a minimum number of active vendors with a deadline.
@@ -99,7 +107,8 @@ The diagram shows the complete lifecycle, from system setup to delivery and audi
   </a>
 </p>
 
-*Click the image to view it in full size.*
+
+
 
 ### Step-by-step summary
 
@@ -170,7 +179,7 @@ Vendors with fewer than 3 completed orders receive a neutral default rating of 3
 | Layer | Technology |
 |---|---|
 | Backend | PHP 8.x (procedural, no framework), PDO with prepared statements |
-| Database | MySQL 8.0+ / InnoDB, `utf8mb4` |
+| Database | MySQL 8.0+ , `utf8mb4` |
 | Web server | Apache 2.4 |
 | Frontend | HTML5, custom CSS, vanilla JavaScript |
 | Charts | [Chart.js](https://www.chartjs.org/) 4.4 (loaded from CDN) |
@@ -234,7 +243,7 @@ Only `public/` is meant to be served by the web server; configuration, business 
 
 ## Database Design
 
-The schema contains **19 InnoDB tables**:
+The schema contains **19 tables**:
 
 | Area | Tables |
 |---|---|
@@ -350,8 +359,6 @@ sudo a2ensite smartprocure && sudo systemctl reload apache2
 echo "127.0.0.1 smartprocure.local" | sudo tee -a /etc/hosts
 ```
 
-Open **http://smartprocure.local** and log in with the administrator account.
-
 > **Running from a sub-folder?** If you open the app as `http://localhost/smartprocure`, set `'base_url' => '/smartprocure'` in `config/config.php`.
 
 ### First-time setup checklist
@@ -419,14 +426,3 @@ The script prints `[PASS]` / `[FAIL]` for each case and a final summary.
 - Integration tests against a test database
 
 ---
-
-## Author
-
-**[Your Name]**
-[Your University / Organisation] · [your.email@example.com] · [GitHub / LinkedIn profile]
-
----
-
-## License
-
-Add your licence here (for example MIT) or state that the project is for academic use.
